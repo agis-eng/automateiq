@@ -4,8 +4,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Send, ArrowLeft, Sparkles, Zap, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { ConversationEngine, type Message } from "@/lib/conversation-engine";
+import { apiRequest } from "@/lib/queryClient";
 import { AutomateIQLogo } from "./landing";
+
+export interface Message {
+  id: string;
+  role: 'assistant' | 'user';
+  content: string;
+  timestamp: number;
+}
 
 // Typing indicator component
 function TypingIndicator() {
@@ -26,7 +33,7 @@ function TypingIndicator() {
           />
         ))}
       </div>
-      <span className="text-xs text-muted-foreground ml-1">AutomateIQ is typing...</span>
+      <span className="text-xs text-muted-foreground ml-1">AutomateIQ is thinking...</span>
     </div>
   );
 }
@@ -40,7 +47,6 @@ function TypewriterText({ text, onComplete, speed = 12 }: { text: string; onComp
     let i = 0;
     const interval = setInterval(() => {
       if (i < text.length) {
-        // Process in chunks of 2-4 characters for faster typing
         const chunkSize = Math.min(3, text.length - i);
         setDisplayed(text.slice(0, i + chunkSize));
         i += chunkSize;
@@ -117,28 +123,53 @@ function ChatMessage({ message, isNew }: { message: Message; isNew: boolean }) {
 
 export default function ChatPage() {
   const [, navigate] = useLocation();
-  const [engine] = useState(() => new ConversationEngine());
   const [messages, setMessages] = useState<Message[]>([]);
+  // Conversation history for API calls (role + content only)
+  const [conversationHistory, setConversationHistory] = useState<{role: string; content: string}[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [newestId, setNewestId] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
-  const [opportunityCount, setOpportunityCount] = useState(0);
+  const [isComplete, setIsComplete] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const exchangeCount = useRef(0);
 
-  // Initialize with greeting
+  // Initialize with first AI message
   useEffect(() => {
-    const greeting = engine.getGreeting();
-    const greetingMsg: Message = {
-      id: 'greeting',
-      role: 'assistant',
-      content: greeting,
-      timestamp: Date.now(),
+    const initChat = async () => {
+      setIsTyping(true);
+      try {
+        const res = await apiRequest("POST", "/api/chat", {
+          messages: [],
+        });
+        const data = await res.json();
+        const greetingMsg: Message = {
+          id: 'greeting',
+          role: 'assistant',
+          content: data.message,
+          timestamp: Date.now(),
+        };
+        setMessages([greetingMsg]);
+        setConversationHistory([{ role: 'assistant', content: data.message }]);
+        setNewestId('greeting');
+      } catch (error) {
+        // Fallback greeting if API fails
+        const fallbackMsg: Message = {
+          id: 'greeting',
+          role: 'assistant',
+          content: "Hey there! 👋 I'm your Business Automation Advisor.\n\nI'm going to ask you a few smart questions about your business and daily workflow, then give you a personalized AI automation roadmap — with specific tools, time savings estimates, and exactly where to start.\n\nMost business owners I work with discover they can save **10-15 hours per week** with the right automations.\n\nLet's dive in — **what kind of business do you run?**",
+          timestamp: Date.now(),
+        };
+        setMessages([fallbackMsg]);
+        setConversationHistory([{ role: 'assistant', content: fallbackMsg.content }]);
+        setNewestId('greeting');
+      }
+      setIsTyping(false);
     };
-    setMessages([greetingMsg]);
-    setNewestId('greeting');
-  }, [engine]);
+    initChat();
+  }, []);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -148,7 +179,7 @@ export default function ChatPage() {
     return () => clearTimeout(timer);
   }, [messages, isTyping]);
 
-  const sendMessage = useCallback(() => {
+  const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text || isTyping) return;
 
@@ -163,39 +194,87 @@ export default function ChatPage() {
     setNewestId(userMsg.id);
     setInput("");
 
+    const newHistory = [...conversationHistory, { role: 'user', content: text }];
+    setConversationHistory(newHistory);
+
     // Show typing indicator
     setIsTyping(true);
+    exchangeCount.current++;
 
-    // Process after delay to simulate thinking
-    setTimeout(() => {
-      const response = engine.processMessage(text);
-      setProgress(engine.getProgress());
-      setOpportunityCount(engine.getOpportunityCount());
+    try {
+      const res = await apiRequest("POST", "/api/chat", {
+        messages: newHistory,
+      });
+      const data = await res.json();
 
-      if (response === '__GENERATE_REPORT__') {
-        // Generate report and navigate
-        const report = engine.generateReport();
-        // Store report data for the report page
-        (window as any).__automateiq_report = report;
-        setIsTyping(false);
-        navigate("/report");
-        return;
+      // Update progress based on exchange count
+      const newProgress = Math.min(100, Math.round((exchangeCount.current / 10) * 100));
+      setProgress(newProgress);
+
+      if (data.isComplete) {
+        setIsComplete(true);
+        // Strip GENERATE_REPORT from the message if present
+        const cleanMessage = data.message.replace(/GENERATE_REPORT[\s\S]*/, '').trim();
+        if (cleanMessage) {
+          const aiMsg: Message = {
+            id: `ai-${Date.now()}`,
+            role: 'assistant',
+            content: cleanMessage,
+            timestamp: Date.now(),
+          };
+          setMessages(prev => [...prev, aiMsg]);
+          setConversationHistory(prev => [...prev, { role: 'assistant', content: data.message }]);
+          setNewestId(aiMsg.id);
+        }
+        setProgress(100);
+      } else {
+        const aiMsg: Message = {
+          id: `ai-${Date.now()}`,
+          role: 'assistant',
+          content: data.message,
+          timestamp: Date.now(),
+        };
+        setMessages(prev => [...prev, aiMsg]);
+        setConversationHistory(prev => [...prev, { role: 'assistant', content: data.message }]);
+        setNewestId(aiMsg.id);
       }
-
-      const aiMsg: Message = {
-        id: `ai-${Date.now()}`,
+    } catch (error: any) {
+      const errorMsg: Message = {
+        id: `error-${Date.now()}`,
         role: 'assistant',
-        content: response,
+        content: "Sorry, I had a moment there. Could you try sending that again?",
         timestamp: Date.now(),
       };
-      setMessages(prev => [...prev, aiMsg]);
-      setNewestId(aiMsg.id);
-      setIsTyping(false);
+      setMessages(prev => [...prev, errorMsg]);
+      setNewestId(errorMsg.id);
+    }
 
-      // Focus input after AI responds
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }, 800 + Math.random() * 600);
-  }, [input, isTyping, engine, navigate]);
+    setIsTyping(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, [input, isTyping, conversationHistory]);
+
+  const generateReport = useCallback(async () => {
+    setIsGeneratingReport(true);
+    try {
+      const res = await apiRequest("POST", "/api/generate-report", {
+        messages: conversationHistory,
+      });
+      const data = await res.json();
+      // Store report for the report page
+      (window as any).__automateiq_report = data.report;
+      navigate("/report");
+    } catch (error) {
+      const errorMsg: Message = {
+        id: `error-${Date.now()}`,
+        role: 'assistant',
+        content: "Sorry, I had trouble generating your report. Let me try again — click the button once more.",
+        timestamp: Date.now(),
+      };
+      setMessages(prev => [...prev, errorMsg]);
+      setNewestId(errorMsg.id);
+      setIsGeneratingReport(false);
+    }
+  }, [conversationHistory, navigate]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -223,32 +302,22 @@ export default function ChatPage() {
               <AutomateIQLogo className="h-6 w-6 text-primary" />
               <div>
                 <div className="text-sm font-semibold text-foreground leading-tight">AutomateIQ</div>
-                <div className="text-[11px] text-muted-foreground leading-tight">Business Automation Advisor</div>
+                <div className="text-[11px] text-muted-foreground leading-tight">AI-Powered Business Advisor</div>
               </div>
             </div>
           </div>
 
-          {/* Opportunity counter */}
-          <AnimatePresence>
-            {opportunityCount > 0 && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent/10 border border-accent/20"
-              >
-                <Zap className="h-3.5 w-3.5 text-accent" />
-                <span className="text-xs font-semibold text-accent">
-                  {opportunityCount} {opportunityCount === 1 ? "opportunity" : "opportunities"} found
-                </span>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Live indicator */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">GPT-4o Live</span>
+          </div>
         </div>
 
         {/* Progress bar */}
         <div className="px-4 pb-2 max-w-3xl mx-auto">
           <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
-            <span>Progress</span>
+            <span>Discovery Progress</span>
             <span>{progress}%</span>
           </div>
           <Progress value={progress} className="h-1.5" />
@@ -283,6 +352,37 @@ export default function ChatPage() {
             </motion.div>
           )}
 
+          {/* Generate Report Button */}
+          {isComplete && !isGeneratingReport && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex justify-center py-4"
+            >
+              <Button
+                data-testid="button-generate-report"
+                onClick={generateReport}
+                size="lg"
+                className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold px-8 py-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 gap-2"
+              >
+                <Sparkles className="h-5 w-5" />
+                Generate My Automation Report
+              </Button>
+            </motion.div>
+          )}
+
+          {/* Generating report spinner */}
+          {isGeneratingReport && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col items-center gap-3 py-6"
+            >
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Generating your personalized automation report...</p>
+            </motion.div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
       </div>
@@ -299,15 +399,15 @@ export default function ChatPage() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Type your response..."
-                disabled={isTyping}
+                placeholder={isComplete ? "Report is ready! Click the button above." : "Type your response..."}
+                disabled={isTyping || isComplete || isGeneratingReport}
                 className="w-full px-4 py-3 rounded-xl border border-border/60 bg-card text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all disabled:opacity-50"
               />
             </div>
             <Button
               data-testid="button-send"
               onClick={sendMessage}
-              disabled={!input.trim() || isTyping}
+              disabled={!input.trim() || isTyping || isComplete || isGeneratingReport}
               size="sm"
               className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-3 rounded-xl h-auto"
             >
@@ -319,7 +419,7 @@ export default function ChatPage() {
             </Button>
           </div>
           <p className="text-[10px] text-muted-foreground text-center mt-2">
-            Your responses are analyzed locally to generate personalized recommendations
+            Powered by GPT-4o · Your responses are used to generate personalized recommendations
           </p>
         </div>
       </div>

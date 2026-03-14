@@ -1,5 +1,17 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "functions": {
+    "api/chat.ts": {
+      "maxDuration": 30
+    },
+    "api/generate-report.ts": {
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    { "source": "/api/chat", "destination": "/api/chat" },
+    { "source": "/api/generate-report", "destination": "/api/generate-report" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
