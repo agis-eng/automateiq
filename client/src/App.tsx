@@ -8,6 +8,7 @@ import NotFound from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
 import ChatPage from "@/pages/chat";
 import ReportPage from "@/pages/report";
+import QuestionnairePage from "@/pages/questionnaire";
 import { useEffect, useState, createContext, useContext } from "react";
 
 // Theme context
@@ -46,6 +47,7 @@ function AppRouter() {
     <Switch>
       <Route path="/" component={LandingPage} />
       <Route path="/chat" component={ChatPage} />
+      <Route path="/questionnaire" component={QuestionnairePage} />
       <Route path="/report" component={ReportPage} />
       <Route component={NotFound} />
     </Switch>

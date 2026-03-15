@@ -1,6 +1,6 @@
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { ArrowRight, Clock, Zap, BarChart3, CheckCircle2, Sparkles, Users, Timer } from "lucide-react";
+import { ArrowRight, Clock, Zap, BarChart3, CheckCircle2, Sparkles, Users, Timer, ClipboardList, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState, useRef } from "react";
 
@@ -154,22 +154,34 @@ export default function LandingPage() {
             with specific tools, time savings estimates, and exactly where to start.
           </motion.p>
 
-          {/* CTA Button */}
+          {/* CTA Buttons */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.4 }}
             className="flex flex-col items-center gap-4"
           >
-            <Button
-              data-testid="cta-start"
-              onClick={() => navigate("/chat")}
-              size="lg"
-              className="bg-accent hover:bg-accent/90 text-accent-foreground text-base font-semibold px-8 py-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5"
-            >
-              Get My Free Automation Report
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
+                data-testid="cta-start"
+                onClick={() => navigate("/chat")}
+                size="lg"
+                className="bg-accent hover:bg-accent/90 text-accent-foreground text-base font-semibold px-8 py-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 gap-2"
+              >
+                <MessageCircle className="h-5 w-5" />
+                Chat with AI Advisor
+              </Button>
+              <Button
+                data-testid="cta-form"
+                onClick={() => navigate("/questionnaire")}
+                size="lg"
+                variant="outline"
+                className="text-base font-semibold px-8 py-6 rounded-xl border-border/80 hover:bg-card transition-all duration-300 hover:-translate-y-0.5 gap-2"
+              >
+                <ClipboardList className="h-5 w-5" />
+                Fill Out Questionnaire
+              </Button>
+            </div>
             <p className="text-sm text-muted-foreground flex items-center gap-1.5">
               <Timer className="h-3.5 w-3.5" />
               Takes about 5 minutes · No signup required
@@ -345,15 +357,26 @@ export default function LandingPage() {
               <p className="text-primary-foreground/80 mb-6 text-sm leading-relaxed">
                 Join 2,500+ business owners who've discovered exactly where AI can save them 10+ hours every week.
               </p>
-              <Button
-                data-testid="cta-start-bottom"
-                onClick={() => navigate("/chat")}
-                size="lg"
-                className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold px-8 py-5 rounded-xl"
-              >
-                Start My Free Analysis
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Button
+                  data-testid="cta-start-bottom"
+                  onClick={() => navigate("/chat")}
+                  size="lg"
+                  className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold px-8 py-5 rounded-xl gap-2"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                  Chat with AI Advisor
+                </Button>
+                <Button
+                  onClick={() => navigate("/questionnaire")}
+                  size="lg"
+                  variant="outline"
+                  className="font-semibold px-8 py-5 rounded-xl border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10 gap-2"
+                >
+                  <ClipboardList className="h-5 w-5" />
+                  Fill Out Questionnaire
+                </Button>
+              </div>
             </div>
           </motion.div>
         </div>
